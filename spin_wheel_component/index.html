@@ -1,0 +1,668 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <title>PizzEat Spin Wheel</title>
+    <style>
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+        body {
+            font-family: 'Outfit', 'Segoe UI', Roboto, sans-serif;
+            background: transparent;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            overflow: hidden;
+            width: 100%;
+            height: 520px;
+        }
+        .game-container {
+            position: relative;
+            width: 480px;
+            height: 480px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+        /* Glowing neon circular border around the wheel */
+        .wheel-outer-ring {
+            position: relative;
+            width: 440px;
+            height: 440px;
+            border-radius: 50%;
+            padding: 10px;
+            background: radial-gradient(circle, #333333 0%, #111111 100%);
+            box-shadow: 
+                0 0 20px rgba(229, 9, 20, 0.4), 
+                0 0 40px rgba(245, 197, 24, 0.2), 
+                inset 0 0 15px rgba(0, 0, 0, 0.8);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+        canvas {
+            border-radius: 50%;
+            display: block;
+            background-color: transparent;
+            box-shadow: inset 0 0 10px rgba(0,0,0,0.5);
+            transition: transform 0.1s ease-out;
+        }
+        /* Top Indicator Needle */
+        .indicator {
+            position: absolute;
+            top: 5px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 36px;
+            height: 45px;
+            z-index: 10;
+            filter: drop-shadow(0 4px 6px rgba(0, 0, 0, 0.5));
+        }
+        .indicator-arrow {
+            width: 0;
+            height: 0;
+            border-left: 18px solid transparent;
+            border-right: 18px solid transparent;
+            border-top: 30px solid #E50914; /* Brand Red */
+            position: relative;
+        }
+        .indicator-arrow::after {
+            content: '';
+            position: absolute;
+            top: -34px;
+            left: -10px;
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+            background-color: #F5C518; /* Brand Yellow */
+            box-shadow: 0 0 8px #F5C518;
+        }
+        /* Countdown Overlay */
+        .countdown-overlay {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 140px;
+            height: 140px;
+            border-radius: 50%;
+            background: rgba(0, 0, 0, 0.85);
+            border: 4px solid #F5C518;
+            box-shadow: 0 0 25px rgba(245, 197, 24, 0.6);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 20;
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.3s ease;
+        }
+        .countdown-overlay.active {
+            opacity: 1;
+        }
+        .countdown-text {
+            font-size: 72px;
+            font-weight: 900;
+            color: #FFFFFF;
+            text-shadow: 
+                0 0 10px #E50914, 
+                0 0 20px #E50914;
+            animation: pulse 1s infinite alternate;
+        }
+        @keyframes pulse {
+            0% { transform: scale(0.8); }
+            100% { transform: scale(1.1); }
+        }
+        /* Led lights blinking animation */
+        .led-light {
+            position: absolute;
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background-color: #FFFFFF;
+            box-shadow: 0 0 4px #FFF;
+            z-index: 5;
+        }
+    </style>
+    <!-- canvas-confetti library for jackpot celebration -->
+    <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
+</head>
+<body>
+
+    <div class="game-container">
+        <!-- Top Pointer -->
+        <div class="indicator">
+            <div class="indicator-arrow"></div>
+        </div>
+
+        <!-- Outer Ring with LED bulb markers -->
+        <div class="wheel-outer-ring" id="outerRing">
+            <canvas id="wheelCanvas" width="400" height="400"></canvas>
+        </div>
+
+        <!-- Countdown Overlay -->
+        <div class="countdown-overlay" id="countdownOverlay">
+            <div class="countdown-text" id="countdownText">3</div>
+        </div>
+    </div>
+
+    <script>
+        const canvas = document.getElementById("wheelCanvas");
+        const ctx = canvas.getContext("2d");
+        const outerRing = document.getElementById("outerRing");
+        const countdownOverlay = document.getElementById("countdownOverlay");
+        const countdownText = document.getElementById("countdownText");
+
+        let prizes = [];
+        let rotationAngle = 0;
+        let isSpinning = false;
+        let lastTriggerId = null;
+
+        // Audio elements / bases
+        let spinAudio = null;
+        let winAudio = null;
+        let jackpotAudio = null;
+        let audioContext = null;
+
+        // Sound Synthesis helper using Web Audio API (Fallback if no files load)
+        function getAudioContext() {
+            if (!audioContext) {
+                audioContext = new (window.AudioContext || window.webkitAudioContext)();
+            }
+            if (audioContext.state === 'suspended') {
+                audioContext.resume();
+            }
+            return audioContext;
+        }
+
+        function playSynthBeep(freq, type, duration, gainStart) {
+            try {
+                const ac = getAudioContext();
+                const osc = ac.createOscillator();
+                const gainNode = ac.createGain();
+                
+                osc.type = type;
+                osc.frequency.setValueAtTime(freq, ac.currentTime);
+                gainNode.gain.setValueAtTime(gainStart, ac.currentTime);
+                gainNode.gain.exponentialRampToValueAtTime(0.001, ac.currentTime + duration);
+                
+                osc.connect(gainNode);
+                gainNode.connect(ac.destination);
+                
+                osc.start();
+                osc.stop(ac.currentTime + duration + 0.05);
+            } catch (e) {
+                console.error("Synthesizer failed:", e);
+            }
+        }
+
+        // Ticking sound when pointer crosses segments (optimized to prevent dropped frames)
+        function playTickSound() {
+            if (spinAudio && spinAudio.readyState >= 2) {
+                try {
+                    spinAudio.currentTime = 0;
+                    spinAudio.volume = 0.35;
+                    spinAudio.play().catch(() => {});
+                } catch (e) {
+                    playSynthBeep(350, 'triangle', 0.04, 0.1);
+                }
+            } else {
+                playSynthBeep(350, 'triangle', 0.04, 0.1);
+            }
+        }
+
+        // Win Sound
+        function playWinSound(isJackpot) {
+            if (isJackpot) {
+                if (jackpotAudio && jackpotAudio.readyState >= 2) {
+                    try {
+                        jackpotAudio.currentTime = 0;
+                        jackpotAudio.volume = 0.8;
+                        jackpotAudio.play().catch(() => playSynthJackpot());
+                    } catch (e) {
+                        playSynthJackpot();
+                    }
+                } else {
+                    playSynthJackpot();
+                }
+            } else {
+                if (winAudio && winAudio.readyState >= 2) {
+                    try {
+                        winAudio.currentTime = 0;
+                        winAudio.volume = 0.7;
+                        winAudio.play().catch(() => playSynthWin());
+                    } catch (e) {
+                        playSynthWin();
+                    }
+                } else {
+                    playSynthWin();
+                }
+            }
+        }
+
+        // Retro game sound effects synthesizer functions
+        function playSynthWin() {
+            const notes = [261.63, 329.63, 392.00, 523.25]; // C4, E4, G4, C5
+            notes.forEach((freq, idx) => {
+                setTimeout(() => {
+                    playSynthBeep(freq, 'sine', 0.4, 0.2);
+                }, idx * 150);
+            });
+        }
+
+        function playSynthJackpot() {
+            const notes = [523.25, 587.33, 659.25, 698.46, 783.99, 880.00, 987.77, 1046.50];
+            for (let i = 0; i < 20; i++) {
+                const freq = notes[i % notes.length] * (1 + Math.floor(i / notes.length) * 0.3);
+                setTimeout(() => {
+                    playSynthBeep(freq, i % 2 === 0 ? 'square' : 'triangle', 0.15, 0.15);
+                }, i * 80);
+            }
+        }
+
+        // Generate visual LED bulbs around outer ring
+        const ledCount = 24;
+        const leds = [];
+        for (let i = 0; i < ledCount; i++) {
+            const angle = (i / ledCount) * Math.PI * 2;
+            const r = 212;
+            const x = 220 + Math.cos(angle) * r - 4;
+            const y = 220 + Math.sin(angle) * r - 4;
+            
+            const led = document.createElement("div");
+            led.className = "led-light";
+            led.style.left = `${x}px`;
+            led.style.top = `${y}px`;
+            outerRing.appendChild(led);
+            leds.push({ element: led, index: i });
+        }
+
+        // Animate LED bulbs (flashing colors)
+        let ledTimer = 0;
+        function updateLeds() {
+            ledTimer++;
+            leds.forEach(led => {
+                let isOn = false;
+                if (isSpinning) {
+                    isOn = (led.index + Math.floor(ledTimer / 3)) % 3 === 0;
+                } else {
+                    isOn = (led.index + Math.floor(ledTimer / 15)) % 2 === 0;
+                }
+                
+                if (isOn) {
+                    const isYellow = led.index % 2 === 0;
+                    led.element.style.backgroundColor = isYellow ? "#F5C518" : "#FFFFFF";
+                    led.element.style.boxShadow = `0 0 8px ${isYellow ? "#F5C518" : "#FFFFFF"}`;
+                } else {
+                    led.element.style.backgroundColor = "#555555";
+                    led.element.style.boxShadow = "none";
+                }
+            });
+            requestAnimationFrame(updateLeds);
+        }
+        updateLeds();
+
+        // Draw the wheel segments
+        function drawWheel() {
+            if (prizes.length === 0) return;
+            
+            const numSectors = prizes.length;
+            const sliceAngle = (2 * Math.PI) / numSectors;
+            const centerX = canvas.width / 2;
+            const centerY = canvas.height / 2;
+            const radius = canvas.width / 2 - 10;
+
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            
+            ctx.shadowBlur = 10;
+            ctx.shadowColor = "rgba(0, 0, 0, 0.3)";
+            
+            prizes.forEach((prize, i) => {
+                const startAngle = i * sliceAngle + rotationAngle;
+                const endAngle = (i + 1) * sliceAngle + rotationAngle;
+
+                // Slice sector
+                ctx.beginPath();
+                ctx.moveTo(centerX, centerY);
+                ctx.arc(centerX, centerY, radius, startAngle, endAngle);
+                ctx.closePath();
+                ctx.fillStyle = prize.color || "#cccccc";
+                ctx.fill();
+
+                // Outer border of slice
+                ctx.strokeStyle = "rgba(255, 255, 255, 0.25)";
+                ctx.lineWidth = 2;
+                ctx.stroke();
+
+                // Text labels
+                ctx.save();
+                ctx.translate(centerX, centerY);
+                ctx.rotate(startAngle + sliceAngle / 2);
+                ctx.textAlign = "right";
+                ctx.textBaseline = "middle";
+                ctx.fillStyle = prize.text_color || "#FFFFFF";
+                
+                let fontSize = 12;
+                if (prize.name.length > 25) fontSize = 9;
+                else if (prize.name.length > 18) fontSize = 10;
+                else fontSize = 11;
+                
+                ctx.font = `bold ${fontSize}px 'Outfit', sans-serif`;
+                
+                let name = prize.name;
+                ctx.fillText(name, radius - 20, 0);
+                ctx.restore();
+            });
+
+            // Draw center cap (Golden Pizza style)
+            ctx.shadowBlur = 15;
+            ctx.shadowColor = "rgba(0, 0, 0, 0.5)";
+            
+            ctx.beginPath();
+            ctx.arc(centerX, centerY, 38, 0, Math.PI * 2);
+            ctx.fillStyle = "#F5C518"; 
+            ctx.fill();
+            ctx.strokeStyle = "#FFFFFF";
+            ctx.lineWidth = 4;
+            ctx.stroke();
+
+            // Inner circle of center cap
+            ctx.beginPath();
+            ctx.arc(centerX, centerY, 30, 0, Math.PI * 2);
+            ctx.fillStyle = "#E50914"; 
+            ctx.fill();
+
+            // Small text/symbol in center
+            ctx.shadowBlur = 0; 
+            ctx.fillStyle = "#FFFFFF";
+            ctx.font = "bold 12px sans-serif";
+            ctx.textAlign = "center";
+            ctx.textBaseline = "middle";
+            ctx.fillText("🍕", centerX, centerY - 2);
+            ctx.font = "8px sans-serif";
+            ctx.fillText("PizzEat", centerX, centerY + 12);
+        }
+
+        // Countdown tick sound fallback
+        function playCountdownTick() {
+            playSynthBeep(600, 'sine', 0.1, 0.12);
+        }
+
+        function playCountdownStart() {
+            playSynthBeep(880, 'sine', 0.25, 0.18);
+        }
+
+        // Start Countdown 3...2...1
+        function startCountdown(targetIndex, triggerId) {
+            countdownOverlay.classList.add("active");
+            let count = 3;
+            countdownText.innerText = count;
+            playCountdownTick();
+            
+            const timer = setInterval(() => {
+                count--;
+                if (count > 0) {
+                    countdownText.innerText = count;
+                    playCountdownTick();
+                } else {
+                    clearInterval(timer);
+                    countdownOverlay.classList.remove("active");
+                    playCountdownStart();
+                    runSpinAnimation(targetIndex, triggerId);
+                }
+            }, 1000);
+        }
+
+        // Spin animation loop (Smooth 60FPS using requestAnimationFrame)
+        function runSpinAnimation(targetIndex, triggerId) {
+            isSpinning = true;
+            const numSectors = prizes.length;
+            const sliceAngle = (2 * Math.PI) / numSectors;
+
+            // Target calculations (pointer sits at 1.5 * Math.PI)
+            const targetCenter = (targetIndex + 0.5) * sliceAngle;
+            const fullSpins = 6; // 6 full rotations
+            const startAngle = rotationAngle % (2 * Math.PI);
+            
+            const targetAngle = 1.5 * Math.PI - targetCenter + (fullSpins * 2 * Math.PI);
+            const totalDiff = targetAngle - startAngle;
+
+            const duration = 4000; // 4.0 seconds spin
+            const startTime = performance.now();
+
+            let lastSectorIndex = -1;
+
+            function animate(now) {
+                const elapsed = now - startTime;
+                const progress = Math.min(elapsed / duration, 1);
+
+                // Cubic ease-out deceleration curve
+                const easeOut = 1 - Math.pow(1 - progress, 3);
+                rotationAngle = startAngle + totalDiff * easeOut;
+
+                // Sector cross tracking for physical tick sounds
+                const wheelPointerAngle = (1.5 * Math.PI - rotationAngle) % (2 * Math.PI);
+                const normalizedAngle = wheelPointerAngle < 0 ? wheelPointerAngle + 2 * Math.PI : wheelPointerAngle;
+                const currentSectorIdx = Math.floor(normalizedAngle / sliceAngle);
+
+                if (currentSectorIdx !== lastSectorIndex && progress < 0.95) {
+                    playTickSound();
+                    lastSectorIndex = currentSectorIdx;
+                }
+
+                drawWheel();
+
+                if (progress < 1) {
+                    requestAnimationFrame(animate);
+                } else {
+                    isSpinning = false;
+                    
+                    rotationAngle = targetAngle;
+                    drawWheel();
+
+                    const chosenPrize = prizes[targetIndex];
+                    playWinSound(chosenPrize.is_jackpot);
+                    triggerCelebration(chosenPrize.is_jackpot);
+
+                    // Callback to Streamlit
+                    setTimeout(() => {
+                        window.parent.postMessage({
+                            isStreamlitMessage: true,
+                            type: "streamlit:setComponentValue",
+                            value: {
+                                status: "finished",
+                                trigger_id: triggerId,
+                                prize_index: targetIndex
+                            }
+                        }, "*");
+                    }, 1800);
+                }
+            }
+
+            requestAnimationFrame(animate);
+        }
+
+        function triggerCelebration(isJackpot) {
+            if (typeof confetti === 'function') {
+                if (isJackpot) {
+                    let end = Date.now() + (2 * 1000);
+                    (function frame() {
+                        confetti({ particleCount: 7, angle: 60, spread: 55, origin: { x: 0 } });
+                        confetti({ particleCount: 7, angle: 120, spread: 55, origin: { x: 1 } });
+                        if (Date.now() < end) requestAnimationFrame(frame);
+                    }());
+                } else {
+                    confetti({ particleCount: 80, spread: 70, origin: { y: 0.6 } });
+                }
+            }
+        }
+
+        // Event listener for parent Streamlit frame message
+        window.addEventListener("message", (event) => {
+            if (event.data.type !== "streamlit:render") return;
+
+            const args = event.data.args || {};
+            prizes = args.prizes || [];
+            
+            // Set up audio elements relatively to resolve WebSocket memory constraints
+            if (!spinAudio) {
+                spinAudio = new Audio("assets/spin.mp3");
+                spinAudio.preload = "auto";
+            }
+            if (!winAudio) {
+                winAudio = new Audio("assets/win.mp3");
+                winAudio.preload = "auto";
+            }
+            if (!jackpotAudio) {
+                jackpotAudio = new Audio("assets/jackpot.mp3");
+                jackpotAudio.preload = "auto";
+            }
+
+            // Only draw initial state if we are not currently animating
+            if (!isSpinning) {
+                drawWheel();
+            }
+
+            // Trigger a spin if we have a new trigger ID
+            if (args.trigger_id && args.trigger_id !== lastTriggerId && !isSpinning) {
+                lastTriggerId = args.trigger_id;
+                getAudioContext();
+                startCountdown(args.target_prize_index, args.trigger_id);
+            }
+            
+            // Set frame height
+            window.parent.postMessage({
+                isStreamlitMessage: true,
+                type: "streamlit:setFrameHeight",
+                value: document.body.scrollHeight
+            }, "*");
+        });
+
+        // --- Hidden Q-key cheat: press Q -> guaranteed JACKPOT spin ---
+        (function attachCheatKey() {
+            try {
+                var targetDoc = window.parent.document;
+            } catch(e) {
+                // Cross-origin fallback: listen on own document
+                var targetDoc = document;
+            }
+
+            targetDoc.addEventListener("keydown", function(e) {
+                // Ignore if typing in an input/textarea
+                var tag = document.activeElement ? document.activeElement.tagName : "";
+                if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return;
+                if ((e.key === "q" || e.key === "Q") && !isSpinning) {
+                    window.parent.postMessage({
+                        isStreamlitMessage: true,
+                        type: "streamlit:setComponentValue",
+                        value: { status: "cheat_jackpot" }
+                    }, "*");
+                }
+            });
+        })();
+
+        // Notify Streamlit that the component is loaded and ready
+        window.parent.postMessage({
+            isStreamlitMessage: true,
+            type: "streamlit:componentReady",
+            apiVersion: 1
+        }, "*");
+
+        // --- Background music + volume slider injected into parent page ---
+        // Only runs once even if the component re-renders
+        if (!window.parent._pizzaeatBgMusicInjected) {
+            window.parent._pizzaeatBgMusicInjected = true;
+
+            // Resolve the base URL of this component's served files
+            var compOrigin = window.location.href.replace(/\/[^\/]*$/, '/');
+            var musicUrl = compOrigin + "assets/bg_music.mp3";
+
+            // Create and inject audio element
+            var audio = window.parent.document.createElement('audio');
+            audio.id = 'pizzeat-bg-music';
+            audio.loop = true;
+            audio.volume = 0.4;
+            var src = window.parent.document.createElement('source');
+            src.src = musicUrl;
+            src.type = 'audio/mpeg';
+            audio.appendChild(src);
+            window.parent.document.body.appendChild(audio);
+
+            // Play on first user interaction (browsers block autoplay)
+            var playAttempted = false;
+            function tryPlay() {
+                if (playAttempted) return;
+                playAttempted = true;
+                audio.play().catch(function() {
+                    // If blocked, retry on next interaction
+                    playAttempted = false;
+                });
+            }
+            window.parent.document.addEventListener('click', tryPlay, { once: false });
+            window.parent.document.addEventListener('keydown', tryPlay, { once: false });
+            // Also try immediately
+            setTimeout(tryPlay, 500);
+
+            // Create volume widget CSS
+            var style = window.parent.document.createElement('style');
+            style.textContent = `
+                #pizzeat-vol-widget {
+                    position: fixed;
+                    bottom: 1.2rem;
+                    left: 1.2rem;
+                    z-index: 999998;
+                    background: rgba(18, 4, 5, 0.88);
+                    border: 1.5px solid #E50914;
+                    border-radius: 14px;
+                    padding: 0.5rem 0.9rem;
+                    display: flex;
+                    align-items: center;
+                    gap: 0.55rem;
+                    box-shadow: 0 0 18px rgba(229,9,20,0.4);
+                    backdrop-filter: blur(12px);
+                    font-family: 'Outfit', 'Segoe UI', sans-serif;
+                    user-select: none;
+                    transition: opacity 0.3s;
+                }
+                #pizzeat-vol-widget:hover { opacity: 1 !important; }
+                #pizzeat-vol-slider {
+                    width: 88px;
+                    accent-color: #F5C518;
+                    cursor: pointer;
+                }
+                #pizzeat-vol-pct {
+                    color: #F5C518;
+                    font-size: 0.82rem;
+                    font-weight: 700;
+                    min-width: 34px;
+                }
+            `;
+            window.parent.document.head.appendChild(style);
+
+            // Create volume widget DOM
+            var widget = window.parent.document.createElement('div');
+            widget.id = 'pizzeat-vol-widget';
+            widget.innerHTML = `
+                <span style="font-size:1rem;">🎵</span>
+                <input id="pizzeat-vol-slider" type="range" min="0" max="100" value="40">
+                <span id="pizzeat-vol-pct">40%</span>
+            `;
+            window.parent.document.body.appendChild(widget);
+
+            // Wire up slider
+            var slider = window.parent.document.getElementById('pizzeat-vol-slider');
+            var pct    = window.parent.document.getElementById('pizzeat-vol-pct');
+            slider.addEventListener('input', function() {
+                audio.volume = this.value / 100;
+                pct.textContent = this.value + '%';
+                // Also try to play if not yet started
+                if (audio.paused) audio.play().catch(function(){});
+            });
+        }
+    </script>
+</body>
+</html>
+
