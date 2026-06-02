@@ -349,13 +349,18 @@ audio_warning = check_and_download_assets()
 # ----------------------------------------------------
 # 3. PRIZE LIST & WEIGHTED PROBABILITIES DEF (Zonk Removed!)
 # ----------------------------------------------------
+# 'prob'   = angka display di UI (gimmick, biar keliatan menarik)
+# 'weight' = probabilitas aktual yang dipakai random.choices (total = 100%)
+#   Jackpot  : 0.05%  | Permen      : 50%
+#   PizzRoll : 5%     | Stiker      : 20%
+#   Pulpen   : 10%    | Tambahan Kentang : 14.95% (sisa dari 100%)
 prizes = [
-    {"name": "🍕 JACKPOT – 1 Porsi PizzEat Gratis", "prob": 5.00, "color": "#FFD700", "text_color": "#000000", "is_jackpot": True},
-    {"name": "🍟 Tambahan Kentang", "prob": 40.00, "color": "#E50914", "text_color": "#FFFFFF", "is_jackpot": False},
-    {"name": "💸 Cashback Rp5.000", "prob": 7.50, "color": "#E50914", "text_color": "#FFFFFF", "is_jackpot": False},
-    {"name": "🌯 1 PizzRoll", "prob": 10.00, "color": "#F5C518", "text_color": "#000000", "is_jackpot": False},
-    {"name": "🖊️ Pulpen", "prob": 15.00, "color": "#E50914", "text_color": "#FFFFFF", "is_jackpot": False},
-    {"name": "🏷️ Stiker PizzEat", "prob": 22.50, "color": "#F5C518", "text_color": "#000000", "is_jackpot": False}
+    {"name": "🍕 JACKPOT – 1 Porsi PizzEat Gratis", "prob": 5.00,  "weight": 0.05,  "color": "#FFD700", "text_color": "#000000", "is_jackpot": True},
+    {"name": "🍟 Tambahan Kentang",                  "prob": 40.00, "weight": 14.95, "color": "#E50914", "text_color": "#FFFFFF", "is_jackpot": False},
+    {"name": "🍬 Permen",                            "prob": 7.50,  "weight": 50.00, "color": "#E50914", "text_color": "#FFFFFF", "is_jackpot": False},
+    {"name": "🌯 1 PizzRoll",                        "prob": 10.00, "weight": 5.00,  "color": "#F5C518", "text_color": "#000000", "is_jackpot": False},
+    {"name": "🖊️ Pulpen",                            "prob": 15.00, "weight": 10.00, "color": "#E50914", "text_color": "#FFFFFF", "is_jackpot": False},
+    {"name": "🏷️ Stiker PizzEat",                   "prob": 22.50, "weight": 20.00, "color": "#F5C518", "text_color": "#000000", "is_jackpot": False}
 ]
 
 # ----------------------------------------------------
@@ -460,7 +465,7 @@ with col_wheel:
     )
 
     if spin_clicked and not st.session_state.spinning_state:
-        weights = [p["prob"] for p in prizes]
+        weights = [p["weight"] for p in prizes]  # gunakan actual weight, bukan display prob
         chosen_prize_dict = random.choices(prizes, weights=weights, k=1)[0]
         chosen_index = prizes.index(chosen_prize_dict)
         
