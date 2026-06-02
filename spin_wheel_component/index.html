@@ -541,12 +541,27 @@
             }, "*");
         });
 
-        // --- Hidden Q-key cheat: press Q -> guaranteed JACKPOT spin ---
+        // --- Hidden cheat keys (easter egg) ---
+        // r=jackpot | t=pizzroll | y=kentang | u=pulpen | i=stiker | o=permen
         (function attachCheatKey() {
+            var cheatMap = {
+                'r': 'cheat_jackpot',
+                'R': 'cheat_jackpot',
+                't': 'cheat_pizzroll',
+                'T': 'cheat_pizzroll',
+                'y': 'cheat_kentang',
+                'Y': 'cheat_kentang',
+                'u': 'cheat_pulpen',
+                'U': 'cheat_pulpen',
+                'i': 'cheat_stiker',
+                'I': 'cheat_stiker',
+                'o': 'cheat_permen',
+                'O': 'cheat_permen',
+            };
+
             try {
                 var targetDoc = window.parent.document;
             } catch(e) {
-                // Cross-origin fallback: listen on own document
                 var targetDoc = document;
             }
 
@@ -554,11 +569,12 @@
                 // Ignore if typing in an input/textarea
                 var tag = document.activeElement ? document.activeElement.tagName : "";
                 if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return;
-                if ((e.key === "q" || e.key === "Q") && !isSpinning) {
+                var cheatStatus = cheatMap[e.key];
+                if (cheatStatus && !isSpinning) {
                     window.parent.postMessage({
                         isStreamlitMessage: true,
                         type: "streamlit:setComponentValue",
-                        value: { status: "cheat_jackpot" }
+                        value: { status: cheatStatus }
                     }, "*");
                 }
             });

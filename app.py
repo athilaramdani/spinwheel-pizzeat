@@ -356,12 +356,23 @@ audio_warning = check_and_download_assets()
 #   Pulpen   : 10%    | Tambahan Kentang : 14.95% (sisa dari 100%)
 prizes = [
     {"name": "🍕 JACKPOT – 1 Porsi PizzEat Gratis", "prob": 5.00,  "weight": 0.05,  "color": "#FFD700", "text_color": "#000000", "is_jackpot": True},
-    {"name": "🍟 Tambahan Kentang",                  "prob": 40.00, "weight": 14.95, "color": "#E50914", "text_color": "#FFFFFF", "is_jackpot": False},
-    {"name": "🍬 Permen",                            "prob": 7.50,  "weight": 50.00, "color": "#E50914", "text_color": "#FFFFFF", "is_jackpot": False},
+    {"name": "🍟 Tambahan Kentang",                  "prob": 7.50,  "weight": 14.95, "color": "#E50914", "text_color": "#FFFFFF", "is_jackpot": False},
+    {"name": "🍬 Permen",                            "prob": 40.00, "weight": 50.00, "color": "#E50914", "text_color": "#FFFFFF", "is_jackpot": False},
     {"name": "🌯 1 PizzRoll",                        "prob": 10.00, "weight": 5.00,  "color": "#F5C518", "text_color": "#000000", "is_jackpot": False},
     {"name": "🖊️ Pulpen",                            "prob": 15.00, "weight": 10.00, "color": "#E50914", "text_color": "#FFFFFF", "is_jackpot": False},
     {"name": "🏷️ Stiker PizzEat",                   "prob": 22.50, "weight": 20.00, "color": "#F5C518", "text_color": "#000000", "is_jackpot": False}
 ]
+
+# Cheat key → prize index mapping
+# r=jackpot, t=pizzroll, y=kentang, u=pulpen, i=stiker, o=permen
+CHEAT_MAP = {
+    "cheat_jackpot":  0,  # r
+    "cheat_kentang":  1,  # y
+    "cheat_permen":   2,  # o
+    "cheat_pizzroll": 3,  # t
+    "cheat_pulpen":   4,  # u
+    "cheat_stiker":   5,  # i
+}
 
 # ----------------------------------------------------
 # 4. SESSION STATE INITIALIZATION
@@ -485,9 +496,9 @@ with col_wheel:
     
     # Handle spin complete callback OR cheat jackpot trigger
     if result:
-        if result.get("status") == "cheat_jackpot" and not st.session_state.spinning_state:
-            # Q-key easter egg: force JACKPOT spin
-            st.session_state.target_prize_index = 0  # index 0 = JACKPOT
+        if result.get("status") in CHEAT_MAP and not st.session_state.spinning_state:
+            # Cheat key easter egg: force spin ke prize tertentu
+            st.session_state.target_prize_index = CHEAT_MAP[result["status"]]
             st.session_state.trigger_id = str(uuid.uuid4())
             st.session_state.spinning_state = True
             st.session_state.current_result = None
